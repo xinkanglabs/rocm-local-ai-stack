@@ -1,71 +1,115 @@
-vLLM + Qwen2.5 + Open WebUI Setup Guide
+[vllm-qwen-setup-guide.md](https://github.com/user-attachments/files/27696956/vllm-qwen-setup-guide.md)
+# vLLM + Qwen2.5 + Open WebUI Setup Guide
+
 AMD RX 7900 XTX (gfx1100) + ROCm + vLLM + Open WebUI
 
-Overview
+---
+
+## Overview
+
 A fully local OpenAI-compatible AI server with:
-·	High-speed inference
-·	Long context handling
-·	Multi-agent compatibility
-·	OpenAI API compatibility
-·	Browser-based chat UI
-·	ROCm GPU acceleration
 
-Hardware & Software
-Component	Spec
-GPU	AMD Radeon RX 7900 XTX 24GB
-CPU	AMD Ryzen series
-RAM	64GB+ recommended
-OS	Ubuntu 24.04 LTS
+- High-speed inference
+- Long context handling
+- Multi-agent compatibility
+- OpenAI API compatibility
+- Browser-based chat UI
+- ROCm GPU acceleration
 
-Software Stack: ROCm · Docker · vLLM ROCm · Open WebUI · Qwen2.5-7B-Instruct
+---
 
-Folder Structure
+## Hardware & Software
+
+| Component | Spec |
+|---|---|
+| GPU | AMD Radeon RX 7900 XTX 24GB |
+| CPU | AMD Ryzen series |
+| RAM | 64GB+ recommended |
+| OS | Ubuntu 24.04 LTS |
+
+**Software Stack:** ROCm · Docker · vLLM ROCm · Open WebUI · Qwen2.5-7B-Instruct
+
+---
+
+## Folder Structure
+
+```bash
 ~/ai_work/
 ├── vllm_models/
 │   └── Qwen2.5-7B-Instruct/
 ├── llama.cpp/
 ├── benchmark/
 └── logs/
+```
 
 Keep llama.cpp GGUF models and vLLM FP16 models in separate directories.
 
-Step 1 — Install Docker
+---
+
+## Step 1 — Install Docker
+
+```bash
 sudo apt update
 sudo apt install -y docker.io docker-compose
 sudo systemctl enable docker
 sudo systemctl start docker
 sudo usermod -aG docker $USER
+```
 
 Re-login after adding user to docker group.
 
-Step 2 — Verify ROCm Devices
+---
+
+## Step 2 — Verify ROCm Devices
+
+```bash
 ls /dev/kfd
 ls /dev/dri
+```
 
+---
 
-Step 3 — Create Working Directory
+## Step 3 — Create Working Directory
+
+```bash
 mkdir -p ~/ai_work/vllm_models
+```
 
+---
 
-Step 4 — Download Qwen2.5-7B-Instruct
+## Step 4 — Download Qwen2.5-7B-Instruct
+
+```bash
 hf download Qwen/Qwen2.5-7B-Instruct \
   --local-dir ~/ai_work/vllm_models/Qwen2.5-7B-Instruct
+```
 
 Expected files:
+
+```text
 config.json
 model-00001-of-00004.safetensors
 model-00002-of-00004.safetensors
 model-00003-of-00004.safetensors
 model-00004-of-00004.safetensors
 tokenizer.json
+```
 
+---
 
-Step 5 — Create Docker Network
+## Step 5 — Create Docker Network
+
+```bash
 docker network create ai-net
+```
 
 This allows Open WebUI, vLLM, and future agent containers to communicate through container DNS.
 
-Step 6 — Run vLLM ROCm Container
+---
+
+## Step 6 — Run vLLM ROCm Container
+
+```bash
 docker run -it --rm \
   --network ai-net \
   --name vllm-qwen \
@@ -77,10 +121,15 @@ docker run -it --rm \
   -p 8001:8000 \
   -v ~/ai_work/vllm_models:/models \
   vllm/vllm-openai-rocm:latest
+```
 
+---
 
-Step 7 — Start Qwen in vLLM
+## Step 7 — Start Qwen in vLLM
+
 Inside the container:
+
+```bash
 vllm serve /models/Qwen2.5-7B-Instruct \
   --host 0.0.0.0 \
   --port 8000 \
@@ -89,13 +138,21 @@ vllm serve /models/Qwen2.5-7B-Instruct \
   --max-model-len 8192 \
   --max-num-seqs 8 \
   --enforce-eager
+```
 
+---
 
-Step 8 — Verify vLLM Server
+## Step 8 — Verify vLLM Server
+
+```bash
 curl http://localhost:8001/v1/models
+```
 
+---
 
-Step 9 — Chat Test
+## Step 9 — Chat Test
+
+```bash
 curl http://localhost:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -106,9 +163,13 @@ curl http://localhost:8001/v1/chat/completions \
     "max_tokens": 128,
     "temperature": 0.7
   }'
+```
 
+---
 
-Step 10 — Install Open WebUI
+## Step 10 — Install Open WebUI
+
+```bash
 docker run -d \
   --network ai-net \
   --name open-webui-vllm \
@@ -116,19 +177,30 @@ docker run -d \
   -e ENABLE_SIGNUP=True \
   -v open-webui:/app/backend/data \
   ghcr.io/open-webui/open-webui:main
+```
 
+---
 
-Step 11 — Connect Open WebUI to vLLM
-Open http://localhost:8080, create admin account, then:
+## Step 11 — Connect Open WebUI to vLLM
+
+Open `http://localhost:8080`, create admin account, then:
+
+```text
 Settings → Connections → OpenAI API
 
 Base URL: http://vllm-qwen:8000/v1
 API Key:  EMPTY
+```
 
-Important: Browser uses localhost:8001, containers use http://vllm-qwen:8000
+> **Important:** Browser uses `localhost:8001`, containers use `http://vllm-qwen:8000`
 
-Benchmarking
-Write / Decode Speed
+---
+
+## Benchmarking
+
+### Write / Decode Speed
+
+```bash
 TIMEFORMAT='%3R'; time curl -s http://localhost:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -138,9 +210,13 @@ TIMEFORMAT='%3R'; time curl -s http://localhost:8001/v1/chat/completions \
   }' > benchmark.json
 
 cat benchmark.json | jq '.usage'
+```
 
-Example: 1024 tokens / 18.128s = 56.5 tok/s
-Read / Prefill Speed
+Example: `1024 tokens / 18.128s = 56.5 tok/s`
+
+### Read / Prefill Speed
+
+```bash
 python3 - << 'PY'
 import json
 prompt = ("Explain ROCm and vLLM. " * 500)
@@ -159,46 +235,75 @@ TIMEFORMAT='%3R'; time curl -s -X POST \
   --data-binary @payload2.json > readbench2.json
 
 cat readbench2.json | jq '.usage'
+```
 
-Example: 4031 tokens / 1.182s = 3410 tok/s
+Example: `4031 tokens / 1.182s = 3410 tok/s`
 
-Benchmark Results
-Metric	Qwen2.5-7B FP16 + vLLM
-Read / Prefill	~3410 tok/s
-Write / Decode	~56.5 tok/s
+---
 
+## Benchmark Results
 
-Common Problems
-Port Already Allocated
+| Metric | Qwen2.5-7B FP16 + vLLM |
+|---|---|
+| Read / Prefill | ~3410 tok/s |
+| Write / Decode | ~56.5 tok/s |
+
+---
+
+## Common Problems
+
+### Port Already Allocated
+
+```bash
 docker ps
 docker stop <container>
+```
 
-Open WebUI Signup Not Appearing
+### Open WebUI Signup Not Appearing
+
+```bash
 -e ENABLE_SIGNUP=True
+```
 
-Old Config Remaining
+### Old Config Remaining
+
+```bash
 docker volume rm open-webui
+```
 
-Context Length Error
+### Context Length Error
+
+```text
 This model's maximum context length is 8192 tokens
+```
 
 Context = input tokens + output tokens. Measured in tokens, not characters.
 
-Docker Networking Notes
-Access	URL
-From browser	http://localhost:8001
-Container to container	http://vllm-qwen:8000
+---
 
+## Docker Networking Notes
 
-vLLM vs llama.cpp
-	vLLM	llama.cpp
-Best for	Multi-user, API servers, RAG	Local single-user, low-latency
-Format	FP16 / BF16	GGUF quantized
-PagedAttention	Yes	No
-Prefill speed	Very fast	Fast
+| Access | URL |
+|---|---|
+| From browser | http://localhost:8001 |
+| Container to container | http://vllm-qwen:8000 |
 
+---
 
-Optional Security
+## vLLM vs llama.cpp
+
+| | vLLM | llama.cpp |
+|---|---|---|
+| Best for | Multi-user, API servers, RAG | Local single-user, low-latency |
+| Format | FP16 / BF16 | GGUF quantized |
+| PagedAttention | Yes | No |
+| Prefill speed | Very fast | Fast |
+
+---
+
+## Optional Security
+
+```bash
 # Localhost only
 -p 127.0.0.1:8001:8000
 -p 127.0.0.1:8080:8080
@@ -208,11 +313,15 @@ Optional Security
 
 # Add API key
 --api-key YOUR_SECRET_KEY
+```
 
+---
 
-Useful Docker Commands
+## Useful Docker Commands
+
+```bash
 docker ps                    # list running containers
 docker stop vllm-qwen        # stop container
 docker rm vllm-qwen          # remove container
 docker logs -f vllm-qwen     # view logs
-
+```
